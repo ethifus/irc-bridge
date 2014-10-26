@@ -1,0 +1,16 @@
+{
+	"Nicks": ["bridge", "bridge1", "bridge2"],
+	"Username": "IRC_Bridge",
+	"Servers": [
+		{
+            "Name": "ULNet 1",
+			"Adress": "irc.ulegend.net:6667",
+			"Channel": "#br0"
+		},
+		{
+            "Name": "ULNet 2",
+			"Adress": "irc.ulegend.net:6667",
+			"Channel": "#br1"
+		}
+	]
+}
