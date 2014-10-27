@@ -1,17 +1,17 @@
 {
-	"Nicks": ["bridge", "bridge1", "bridge2"],
-	"Username": "IRC_Bridge",
-	"Servers": [
+	"nicks": ["bridge", "bridge1", "bridge2"],
+	"username": "IRC_Bridge",
+	"servers": [
 		{
-            "Name": "ULNet 1",
-			"Adress": "irc.ulegend.net:6667",
-			"Channel": "#br0"
+            "name": "ULNet 1",
+			"address": "irc.ulegend.net:6667",
+			"channel": "#br0"
 		},
 		{
-            "Name": "ULNet 2",
-			"Adress": "irc.ulegend.net:6667",
-			"Channel": "#br1"
+            "name": "ULNet 2",
+			"address": "irc.ulegend.net:6667",
+			"channel": "#br1"
 		}
 	],
-	"Template": "[{{.Sender}}] <{{.Nick}}> {{.Body}}"
+	"template": "[{{.Sender}}] <{{.Nick}}> {{.Body}}"
 }
