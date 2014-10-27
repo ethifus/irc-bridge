@@ -12,5 +12,6 @@
 			"Adress": "irc.ulegend.net:6667",
 			"Channel": "#br1"
 		}
-	]
+	],
+	"Template": "[{{.Sender}}] <{{.Nick}}> {{.Body}}"
 }

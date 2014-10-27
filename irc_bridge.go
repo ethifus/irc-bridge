@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"os"
+	"text/template"
 
 	"github.com/thoj/go-ircevent"
 )
@@ -15,8 +17,9 @@ type ServerConfig struct {
 }
 
 type Configuration struct {
-	Nicks   []string
-	Servers []ServerConfig
+	Nicks    []string
+	Servers  []ServerConfig
+	Template string
 }
 
 type Message struct {
@@ -26,10 +29,11 @@ type Message struct {
 }
 
 type ServerConfigAll struct {
-	Server  ServerConfig
-	Nicks   []string
-	Sink    chan Message
-	Reciver chan Message
+	Server   ServerConfig
+	Nicks    []string
+	Sink     chan Message
+	Reciver  chan Message
+	Template *template.Template
 }
 
 var logger = log.New(os.Stdout, "irc_bridge:", log.LstdFlags)
@@ -98,32 +102,40 @@ func makeConnection(config ServerConfigAll) {
 			message := <-config.Reciver
 			logger.Printf("[%s] recived message: %s\n", serverName, message)
 			if message.Sender != serverName {
-				conn.Privmsgf(config.Server.Channel, "[%s] <%s> %s",
-					message.Sender, message.Nick, message.Body)
+				var buffer bytes.Buffer
+
+				err := config.Template.Execute(&buffer, message)
+				if err != nil {
+					logger.Fatalf("Invalid template: %s\n", err)
+				}
+
+				conn.Privmsg(config.Server.Channel, buffer.String())
 			}
 		}
 	}()
 
-	conn.Loop()
+	go conn.Loop()
 }
 
 func makeConnections(config *Configuration, sink chan Message) []chan Message {
 	recivers := make([]chan Message, len(config.Servers))
 
-	for i, value := range config.Servers {
+	tmpl, err := template.New("message").Parse(config.Template)
+	if err != nil {
+		logger.Fatal("Could not crate message template: %s", err)
+	}
+
+	for i, server := range config.Servers {
 		reciver := make(chan Message)
 		serverConfig := ServerConfigAll{
-			Server: ServerConfig{
-				Name:    value.Name,
-				Adress:  value.Adress,
-				Channel: value.Channel,
-			},
-			Nicks:   config.Nicks,
-			Sink:    sink,
-			Reciver: reciver,
+			Server:   server,
+			Nicks:    config.Nicks,
+			Sink:     sink,
+			Reciver:  reciver,
+			Template: tmpl,
 		}
 		recivers[i] = reciver
-		go makeConnection(serverConfig)
+		makeConnection(serverConfig)
 	}
 	return recivers
 }
