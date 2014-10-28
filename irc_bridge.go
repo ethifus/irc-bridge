@@ -33,9 +33,10 @@ type ServerConfigAll struct {
 }
 
 type Message struct {
-	Sender string // Server's name, same as in ServerConfig.Name
-	Nick   string
-	Body   string
+	Sender  string // Server's name, same as in ServerConfig.Name
+	Channel string // Channel name
+	Nick    string
+	Body    string
 }
 
 var logger = log.New(os.Stdout, "irc_bridge:", log.LstdFlags)
@@ -47,6 +48,7 @@ func loadConfig(configPath string) *Configuration {
 		logger.Println(err.Error())
 		logger.Fatal("Can't open config file.")
 	}
+	defer configFile.Close()
 
 	var config Configuration
 	jsonParser := json.NewDecoder(configFile)
@@ -80,9 +82,10 @@ func setupCallbacks(conn *irc.Connection, config ServerConfigAll) {
 	// recive message on irc channel and send it to config.Sink
 	conn.AddCallback("PRIVMSG", func(e *irc.Event) {
 		message := Message{
-			Sender: serverName,
-			Nick:   e.Nick,
-			Body:   e.Message(),
+			Sender:  serverName,
+			Channel: config.Server.Channel,
+			Nick:    e.Nick,
+			Body:    e.Message(),
 		}
 		logger.Println(formatMessage(config.Template, message))
 		config.Sink <- message

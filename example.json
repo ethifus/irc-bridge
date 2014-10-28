@@ -3,15 +3,15 @@
 	"username": "IRC_Bridge",
 	"servers": [
 		{
-            "name": "ULNet 1",
+            "name": "ULNet1",
 			"address": "irc.ulegend.net:6667",
 			"channel": "#br0"
 		},
 		{
-            "name": "ULNet 2",
+            "name": "ULNet2",
 			"address": "irc.ulegend.net:6667",
 			"channel": "#br1"
 		}
 	],
-	"template": "[{{.Sender}}] <{{.Nick}}> {{.Body}}"
+	"template": "[{{.Sender}}{{.Channel}}]<{{.Nick}}> {{.Body}}"
 }
