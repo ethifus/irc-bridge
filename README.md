@@ -10,19 +10,23 @@ so you have to download it by:
 
     $ go get github.com/thoj/go-ircevent
 
-You can run IRC Bridge with:
+You can build and run IRC Bridge with:
 
-    $ irc_bridge config.json
+    $ go build irc_bridge.go
+    $ ./irc_bridge config.json
 
 Configuration
 -------------
 
  * *nicks* -- List of nicknames to try (if first is used, try second, etc).
  * *username* -- Bot username.
- * *servers* -- List of servers configurations. Each entry contains *name*,
+ * *networks* -- List of notwork configurations. Each entry contains *name*,
    *address* and *channel*.
- * *template* -- Template for messages which is printed on each channel if
-   message from user is captured (it uses templating system from golang package
-   [text/tempate](http://golang.org/pkg/text/template/)).
+ * *forward* -- List of names of events to catch and resend to all
+   channels. Those can be any valid eventcode used by go-ircevent library
+   (eg. PRIVMSG, CTCP_ACTION, NICK).
+ * *templates* -- Mapping of eventcodes (from *forward*) to templates describing
+   how to print given message types (it uses template system from golang
+   package [text/tempate](http://golang.org/pkg/text/template/)).
 
 See [example.json](example.json).

@@ -10,33 +10,34 @@ import (
 	"github.com/thoj/go-ircevent"
 )
 
-type ServerConfig struct {
+type NetworkConfig struct {
 	Name    string
 	Address string
 	Channel string
 }
 
 type Configuration struct {
-	Nicks    []string
-	Username string
-	Servers  []ServerConfig
-	Template string
+	Nicks     []string
+	Username  string
+	Networks  []NetworkConfig
+	Forward   []string
+	Templates map[string]string
 }
 
-type ServerConfigAll struct {
-	Server   ServerConfig
-	Nicks    []string
-	Username string
-	Sink     chan Message
-	Reciver  chan Message
-	Template *template.Template
+type NetworkConfigAll struct {
+	Network   NetworkConfig
+	Nicks     []string
+	Username  string
+	Sink      chan Message
+	Reciver   chan Message
+	Forward   []string
+	Templates map[string]*template.Template
 }
 
 type Message struct {
-	Sender  string // Server's name, same as in ServerConfig.Name
-	Channel string // Channel name
-	Nick    string
-	Body    string
+	*irc.Event
+	Eventcode string
+	Network   string // Network's name, same as in NetworkConfig.Name
 }
 
 var logger = log.New(os.Stdout, "irc_bridge:", log.LstdFlags)
@@ -57,39 +58,50 @@ func loadConfig(configPath string) *Configuration {
 		logger.Fatal("Can't parse config file.")
 	}
 
+	logger.Println(config)
+
 	return &config
 }
 
 // Setup all callbacks for given connection.
-func setupCallbacks(conn *irc.Connection, config ServerConfigAll) {
-	serverName := config.Server.Name
+func setupCallbacks(conn *irc.Connection, config NetworkConfigAll) {
+	NetworkName := config.Network.Name
 
 	// join desired irc channel on connection success
 	conn.AddCallback("001", func(e *irc.Event) {
-		logger.Printf("[%s] // join -> %s\n", serverName, config.Server.Channel)
-		conn.Join(config.Server.Channel)
+		logger.Printf("[%s] // join -> %s\n", NetworkName, config.Network.Channel)
+		conn.Join(config.Network.Channel)
 	})
 
-	// select another nickserverName if nick is already in use
+	// select next nick if current one is already in use
 	nickIndex := 0
 	conn.AddCallback("433", func(e *irc.Event) {
 		nickIndex++
-		logger.Printf("[%s] // 433 trying change nick to %s\n", serverName,
+		logger.Printf("[%s] // 433 trying change nick to %s\n", NetworkName,
 			config.Nicks[nickIndex])
 		conn.Nick(config.Nicks[nickIndex])
 	})
 
-	// recive message on irc channel and send it to config.Sink
-	conn.AddCallback("PRIVMSG", func(e *irc.Event) {
+	// register all callbacks for events to retransmit
+	for _, eventcode := range config.Forward {
+		conn.AddCallback(eventcode, makeEventHandler(eventcode, config))
+	}
+}
+
+func makeEventHandler(eventcode string, config NetworkConfigAll) func(*irc.Event) {
+	return func(event *irc.Event) {
 		message := Message{
-			Sender:  serverName,
-			Channel: config.Server.Channel,
-			Nick:    e.Nick,
-			Body:    e.Message(),
+			Network:   config.Network.Name,
+			Eventcode: eventcode,
+			Event:     event,
 		}
-		logger.Println(formatMessage(config.Template, message))
+		template, ok := config.Templates[eventcode]
+		if !ok {
+			template = config.Templates["default"]
+		}
+		logger.Println(formatMessage(template, message))
 		config.Sink <- message
-	})
+	}
 }
 
 // Convert given message to string usign given template.
@@ -104,31 +116,35 @@ func formatMessage(template *template.Template, message Message) string {
 	return buffer.String()
 }
 
-// Connect to single server and join desired channel.
-func makeConnection(config ServerConfigAll) {
-	logger.Printf("[%s] (%s/%s)\n", config.Server.Name, config.Server.Address,
-		config.Server.Channel)
+// Connect to single Network and join desired channel.
+func makeConnection(config NetworkConfigAll) {
+	logger.Printf("[%s] (%s/%s)\n", config.Network.Name, config.Network.Address,
+		config.Network.Channel)
 
 	conn := irc.IRC(config.Nicks[0], config.Username)
 	//conn.VerboseCallbackHandler = true
 	//conn.Debug = true
 
-	err := conn.Connect(config.Server.Address)
+	err := conn.Connect(config.Network.Address)
 	if err != nil {
 		logger.Println(err.Error())
-		logger.Fatal("Can't connect to server.")
+		logger.Fatalf("Can't connect to network %s.\n", config.Network.Name)
 	}
 
 	setupCallbacks(conn, config)
 
 	go func() {
-		// wait for messsages on config.Reciver and write to irc channel only
-		// those that are not recived on this server/channel
+		// wait for messages on config.Reciver and write to irc channel only
+		// those that are not recived on this Network/channel
 		for {
 			message := <-config.Reciver
-			if message.Sender != config.Server.Name {
-				text := formatMessage(config.Template, message)
-				conn.Privmsg(config.Server.Channel, text)
+			if message.Network != config.Network.Name {
+				template, ok := config.Templates[message.Eventcode]
+				if !ok {
+					template = config.Templates["default"]
+				}
+				text := formatMessage(template, message)
+				conn.Privmsg(config.Network.Channel, text)
 			}
 		}
 	}()
@@ -137,27 +153,39 @@ func makeConnection(config ServerConfigAll) {
 }
 
 func makeConnections(config *Configuration, sink chan Message) []chan Message {
-	recivers := make([]chan Message, len(config.Servers))
+	recivers := make([]chan Message, len(config.Networks))
+	templates := makeTemplates(config.Templates)
 
-	tmpl, err := template.New("message").Parse(config.Template)
-	if err != nil {
-		logger.Fatal("Could not crate message template: %s", err)
-	}
-
-	for i, server := range config.Servers {
+	for i, Network := range config.Networks {
 		reciver := make(chan Message)
-		serverConfig := ServerConfigAll{
-			Server:   server,
-			Nicks:    config.Nicks,
-			Username: config.Username,
-			Sink:     sink,
-			Reciver:  reciver,
-			Template: tmpl,
+		NetworkConfig := NetworkConfigAll{
+			Network:   Network,
+			Nicks:     config.Nicks,
+			Username:  config.Username,
+			Sink:      sink,
+			Reciver:   reciver,
+			Forward:   config.Forward,
+			Templates: templates,
 		}
 		recivers[i] = reciver
-		makeConnection(serverConfig)
+		makeConnection(NetworkConfig)
 	}
 	return recivers
+}
+
+// Initialize template.Template object for each template defined in configuration
+func makeTemplates(definition map[string]string) map[string]*template.Template {
+	result := make(map[string]*template.Template)
+
+	for key, value := range definition {
+		tmpl, err := template.New(key).Parse(value)
+		if err != nil {
+			logger.Fatalf("Could not create template for '%s': %s\n", key, err)
+		}
+		result[key] = tmpl
+	}
+
+	return result
 }
 
 // Write all messages recived from sink to all recivers.
