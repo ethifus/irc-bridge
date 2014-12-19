@@ -1,18 +1,18 @@
 {
-	"nicks": ["br0", "br1", "br2"],
-	"username": "IRC_Bridge",
-	"networks": [
-		{
+    "nicks": ["br0", "br1", "br2"],
+    "username": "IRC_Bridge",
+    "networks": [
+        {
             "name": "ULNet1",
-			"address": "irc.ulegend.net:6667",
-			"channel": "#br0"
-		},
-		{
+            "address": "irc.ulegend.net:6667",
+            "channel": "#br0"
+        },
+        {
             "name": "ULNet2",
-			"address": "irc.ulegend.net:6667",
-			"channel": "#br1"
-		}
-	],
+            "address": "irc.ulegend.net:6667",
+            "channel": "#br1"
+        }
+    ],
     "forward": ["PRIVMSG", "CTCP_ACTION", "NICK", "NOTICE"],
     "templates": {
         "PRIVMSG": "[{{.Network}}]<{{.Nick}}> {{.Message}}",

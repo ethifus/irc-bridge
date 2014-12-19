@@ -30,3 +30,11 @@ Configuration
    package [text/tempate](http://golang.org/pkg/text/template/)).
 
 See [example.json](example.json).
+
+Tips
+----
+
+It is possible to use color codes nad font formatting in messages templates,
+e.g. to show part of CTCP_ACTION message in bold use:
+
+    "CTCP_ACTION": "{{.Network}} \u0002*{{.Nick}}\u000F {{.Message}}"
