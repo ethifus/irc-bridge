@@ -88,21 +88,25 @@ func setupCallbacks(conn *irc.Connection, config NetworkConfigAll) {
 
 	// register all callbacks for events to retransmit
 	for _, eventcode := range config.Forward {
-		conn.AddCallback(eventcode, makeEventHandler(eventcode, config))
+		conn.AddCallback(eventcode, makeEventHandler(conn, eventcode, config))
 	}
 }
 
-func makeEventHandler(eventcode string, config NetworkConfigAll) func(*irc.Event) {
+// return function that handles IRC event with given code
+func makeEventHandler(conn *irc.Connection, eventcode string,
+	config NetworkConfigAll) func(*irc.Event) {
 	return func(event *irc.Event) {
+		// ignore events sent by myselfe
+		if event.Nick == conn.GetNick() {
+			return
+		}
+
 		message := Message{
 			Network:   config.Network.Name,
 			Eventcode: eventcode,
 			Event:     event,
 		}
-		template, ok := config.Templates[eventcode]
-		if !ok {
-			template = config.Templates["default"]
-		}
+		template := getTemplateForEventcode(eventcode, config.Templates)
 		logger.Println(formatMessage(template, message))
 		config.Sink <- message
 	}
@@ -137,7 +141,7 @@ func makeConnection(config NetworkConfigAll) {
 
 	conn := irc.IRC(config.Nicks[0], config.Username)
 	//conn.VerboseCallbackHandler = true
-	//conn.Debug = true
+	conn.Debug = true
 
 	err := conn.Connect(config.Network.Address)
 	if err != nil {
@@ -147,20 +151,33 @@ func makeConnection(config NetworkConfigAll) {
 
 	setupCallbacks(conn, config)
 
-	go func() {
-		// wait for messages on config.Reciver and write to irc channel only
-		// those that are not recived on this Network/channel
-		for {
-			message := <-config.Reciver
-			if message.Network != config.Network.Name {
-				template := getTemplateForEventcode(message.Eventcode, config.Templates)
-				text := formatMessage(template, message)
-				conn.Privmsg(config.Network.Channel, text)
-			}
-		}
-	}()
-
+	go loopMessages(conn, config)
 	go conn.Loop()
+}
+
+// wait for messages on config.Reciver and write to irc channel only
+// those that are not recived on this Network/channel
+func loopMessages(conn *irc.Connection, config NetworkConfigAll) {
+	for {
+		message := <-config.Reciver
+		// ignore messages sent by myselfe
+		if message.Network == config.Network.Name {
+			continue
+		}
+
+		// set topic
+		if message.Eventcode == "TOPIC" {
+			conn.SendRawf("TOPIC %s :%s (%s)\r\n", config.Network.Channel,
+				message.Message(), message.Nick)
+		}
+
+		template := getTemplateForEventcode(message.Eventcode, config.Templates)
+		text := formatMessage(template, message)
+
+		if len(text) > 0 {
+			conn.Privmsg(config.Network.Channel, text)
+		}
+	}
 }
 
 // Initialize all connections. Returns list of channels for all connected
