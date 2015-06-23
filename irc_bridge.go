@@ -33,7 +33,7 @@ type NetworkConfigAll struct {
 	Sink      chan Message
 	Reciver   chan Message
 	Forward   []string
-	Templates TemplateMap
+	Templates *TemplateMap
 }
 
 type Message struct {
@@ -64,7 +64,7 @@ func loadConfig(configPath string) *Configuration {
 }
 
 // Setup all callbacks for given connection.
-func setupCallbacks(conn *irc.Connection, config NetworkConfigAll) {
+func setupCallbacks(conn *irc.Connection, config *NetworkConfigAll) {
 	NetworkName := config.Network.Name
 
 	// join desired irc channel on connection success
@@ -94,7 +94,7 @@ func setupCallbacks(conn *irc.Connection, config NetworkConfigAll) {
 
 // return function that handles IRC event with given code
 func makeEventHandler(conn *irc.Connection, eventcode string,
-	config NetworkConfigAll) func(*irc.Event) {
+	config *NetworkConfigAll) func(*irc.Event) {
 	return func(event *irc.Event) {
 		// ignore events sent by myselfe
 		if event.Nick == conn.GetNick() {
@@ -107,13 +107,13 @@ func makeEventHandler(conn *irc.Connection, eventcode string,
 			Event:     event,
 		}
 		template := getTemplateForEventcode(eventcode, config.Templates)
-		logger.Println(formatMessage(template, message))
+		logger.Println(formatMessage(template, &message))
 		config.Sink <- message
 	}
 }
 
 // Convert given message to string usign given template.
-func formatMessage(template *template.Template, message Message) string {
+func formatMessage(template *template.Template, message *Message) string {
 	var buffer bytes.Buffer
 
 	err := template.Execute(&buffer, message)
@@ -126,16 +126,16 @@ func formatMessage(template *template.Template, message Message) string {
 
 // Returns *template.Template from 'templates' that corresponds to 'code' or
 // "default" pointer.
-func getTemplateForEventcode(code string, templates TemplateMap) *template.Template {
-	template, ok := templates[code]
+func getTemplateForEventcode(code string, templates *TemplateMap) *template.Template {
+	template, ok := (*templates)[code]
 	if !ok {
-		template = templates["default"]
+		template = (*templates)["default"]
 	}
 	return template
 }
 
 // Connect to single Network and join desired channel.
-func makeConnection(config NetworkConfigAll) {
+func makeConnection(config *NetworkConfigAll) {
 	logger.Printf("[%s] (%s/%s)\n", config.Network.Name, config.Network.Address,
 		config.Network.Channel)
 
@@ -157,7 +157,7 @@ func makeConnection(config NetworkConfigAll) {
 
 // wait for messages on config.Reciver and write to irc channel only
 // those that are not recived on this Network/channel
-func loopMessages(conn *irc.Connection, config NetworkConfigAll) {
+func loopMessages(conn *irc.Connection, config *NetworkConfigAll) {
 	for {
 		message := <-config.Reciver
 		// ignore messages sent by myselfe
@@ -172,7 +172,7 @@ func loopMessages(conn *irc.Connection, config NetworkConfigAll) {
 		}
 
 		template := getTemplateForEventcode(message.Eventcode, config.Templates)
-		text := formatMessage(template, message)
+		text := formatMessage(template, &message)
 
 		if len(text) > 0 {
 			conn.Privmsg(config.Network.Channel, text)
@@ -188,7 +188,7 @@ func makeConnections(config *Configuration, sink chan Message) []chan Message {
 
 	for i, Network := range config.Networks {
 		reciver := make(chan Message)
-		NetworkConfig := NetworkConfigAll{
+		NetworkConfig := &NetworkConfigAll{
 			Network:   Network,
 			Nicks:     config.Nicks,
 			Username:  config.Username,
@@ -205,7 +205,7 @@ func makeConnections(config *Configuration, sink chan Message) []chan Message {
 
 // Initialize template.Template object for each template defined in
 // configuration.
-func makeTemplates(definition map[string]string) TemplateMap {
+func makeTemplates(definition map[string]string) *TemplateMap {
 	result := make(TemplateMap)
 
 	for key, value := range definition {
@@ -216,7 +216,7 @@ func makeTemplates(definition map[string]string) TemplateMap {
 		result[key] = tmpl
 	}
 
-	return result
+	return &result
 }
 
 // Write all messages recived from sink to all recivers.
