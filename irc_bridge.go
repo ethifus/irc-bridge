@@ -31,7 +31,7 @@ type NetworkConfigAll struct {
 	Nicks     []string
 	Username  string
 	Sink      chan Message
-	Reciver   chan Message
+	Receiver  chan Message
 	Forward   []string
 	Templates *TemplateMap
 }
@@ -155,11 +155,11 @@ func makeConnection(config *NetworkConfigAll) {
 	go conn.Loop()
 }
 
-// wait for messages on config.Reciver and write to irc channel only
+// wait for messages on config.Receiver and write to irc channel only
 // those that are not recived on this Network/channel
 func loopMessages(conn *irc.Connection, config *NetworkConfigAll) {
 	for {
-		message := <-config.Reciver
+		message := <-config.Receiver
 		// ignore messages sent by myselfe
 		if message.Network == config.Network.Name {
 			continue
@@ -183,24 +183,24 @@ func loopMessages(conn *irc.Connection, config *NetworkConfigAll) {
 // Initialize all connections. Returns list of channels for all connected
 // Network/channel pair.
 func makeConnections(config *Configuration, sink chan Message) []chan Message {
-	recivers := make([]chan Message, len(config.Networks))
+	receivers := make([]chan Message, len(config.Networks))
 	templates := makeTemplates(config.Templates)
 
 	for i, Network := range config.Networks {
-		reciver := make(chan Message)
+		receiver := make(chan Message)
 		NetworkConfig := &NetworkConfigAll{
 			Network:   Network,
 			Nicks:     config.Nicks,
 			Username:  config.Username,
 			Sink:      sink,
-			Reciver:   reciver,
+			Receiver:  receiver,
 			Forward:   config.Forward,
 			Templates: templates,
 		}
-		recivers[i] = reciver
+		receivers[i] = receiver
 		makeConnection(NetworkConfig)
 	}
-	return recivers
+	return receivers
 }
 
 // Initialize template.Template object for each template defined in
@@ -219,11 +219,11 @@ func makeTemplates(definition map[string]string) *TemplateMap {
 	return &result
 }
 
-// Write all messages recived from sink to all recivers.
-func loop(sink chan Message, recivers []chan Message) {
+// Write all messages recived from sink to all receivers.
+func loop(sink chan Message, receivers []chan Message) {
 	for message := range sink {
-		for _, reciver := range recivers {
-			reciver <- message
+		for _, receiver := range receivers {
+			receiver <- message
 		}
 	}
 }
@@ -235,7 +235,7 @@ func main() {
 
 	config := loadConfig(os.Args[1])
 	sink := make(chan Message)
-	recivers := makeConnections(config, sink)
+	receivers := makeConnections(config, sink)
 
-	loop(sink, recivers)
+	loop(sink, receivers)
 }
